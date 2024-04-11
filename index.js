@@ -15,7 +15,8 @@ const cors = require('cors')
 const errorHandler = require('./helper/errorHandler')
 const orderRouter = require('./routers/order')
 const path=require('path')
-
+const  adminRoute = require('./routers/adminRouter')
+const createUserRoute = require('./routers/createUserRouter')
 // Middleware
 app.use(cors())
 app.options('*',cors())
@@ -33,8 +34,8 @@ app.use(`${api}/category`, categoryRouter )
 app.use(`${api}/order`,orderRouter)
 app.use(`${api}/subCategory`, subCategoryRouter)
 app.use('/public/uploads', express.static(path.join(__dirname, './public/uploads')));
-
-
+app.use(`${api}/admin`, adminRoute)
+app.use(`${api}/admin/createuser`,createUserRoute)
 
   const connection = process.env.MONGO_CONNECTION_URL
 mongoose.connect(connection)

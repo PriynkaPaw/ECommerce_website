@@ -1,16 +1,33 @@
-const express = require('express')
+const express = require('express');
+const { populate } = require('../models/order');
 const Order = require('../models/order')
 const OrderItem = require('../models/order_item')
+const Razorpay = require('razorpay')
 const router = express.Router()
-
+require('dotenv').config()
 router.get('/', async (req, res) => {
-    const OrderList = await Order.find().populate('user', 'name phone').sort({ 'dateOrdered': -1 }); // use sord for sorting the order newest first, 
-    if (!OrderList) {
-        res.status(500).json({ success: false, message: 'Order not found' })
-    }
+    try {
+        const OrderList = await Order.find()
+            .populate('user', 'name phone')
+            .populate({
+                path: 'orderItems',
+                populate: {
+                    path: 'product'
+                }
+            })
 
-    res.status(200).send(OrderList)
-})
+
+        if (!OrderList || OrderList.length === 0) {
+            return res.status(404).json({ success: false, message: 'Orders not found' });
+        }
+
+        res.status(200).send(OrderList);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Internal Server Error' });
+    }
+});
+
 
 
 router.get('/:id', async (req, res) => {
@@ -30,47 +47,51 @@ router.get('/:id', async (req, res) => {
 })
 
 router.post('/', async (req, res) => {
+    try {
+        const orderItems = req.body.orderItems || []; // Default to empty array if orderItems is undefined
+        const orderItemIds = await Promise.all(orderItems.map(async (orderItem) => {
+            let newOrderItem = new OrderItem({
+                quantity: orderItem.quantity,
+                product: orderItem.product
+            });
 
-    const orderItemIds = Promise.all(req.body.orderItems.map(async (orderItem) => {
-        let newOrderItem = new OrderItem({
-            quantity: orderItem.quantity,
-            product: orderItem.product
-        })
+            newOrderItem = await newOrderItem.save();
+            return newOrderItem._id;
+        }));
 
-        newOrderItem = await newOrderItem.save()
-        return newOrderItem._id
-    }))
+        const totalPrices = await Promise.all(orderItemIds.map(async(orderItemId) => {
+            const orderItem = await OrderItem.findById(orderItemId).populate('product', 'price');
+            const totalPrice = orderItem?.product?.price * orderItem.quantity;
+            return totalPrice;
+        }));
 
-    const orderItemsIdResolved = await orderItemIds 
-   const totalPrices = await Promise.all(orderItemsIdResolved.map(async(orderItemId)=>{
-       const orderItem = await OrderItem.findById(orderItemId).populate('product','price')
-       const totalPrice = orderItem.product.price*orderItem.quantity
-       return totalPrice
-   }))
+        const totalPrice = totalPrices.reduce((a, b) => a + b, 0);
 
-    const totalPrice = totalPrices.reduce((a,b)=> a+b, 0); // adding all the values present in order list
+        let order = new Order({
+            orderItems: orderItemIds,
+            shippingAddress: req.body.shippingAddress,
+            city: req.body.city,
+            zip: req.body.zip,
+            country: req.body.country,
+            phone: req.body.phone,
+            status: req.body.status,
+            // totalPrice: totalPrice,
+            user: req.body.user,
+        });
 
-    let order = new Order({
-        orderItems: orderItemsIdResolved,
-        shippingAddress: req.body.shippingAddress,
-        city: req.body.city,
-        zip: req.body.zip,
-        country: req.body.country,
-        phone: req.body.phone,
-        status: req.body.status,
-        totalPrice: totalPrice,
-        user: req.body.user,
+        order = await order.save();
 
-    })
+        if (!order) {
+            return res.status(400).json({ success: false, message: 'Details not added' });
+        }
 
-    order = await order.save();
-
-    if (!order) {
-        res.status(400).json({ success: false, message: 'Details not added' })
+        return res.status(200).send(order);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
     }
+});
 
-    res.status(200).send(order)
-})
 
 
 
@@ -121,6 +142,30 @@ router.get('/get/totalsales', async(req,res)=>{
     }
 
     res.status(200).send({totalSales : totalSales.pop().totalsales})
+})
+
+// for payment
+
+router.post('/pay', async(req,res)=>{
+    
+    try {
+        const razorpay = new Razorpay({
+            key_id:process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_SECRET
+        })
+      
+        const options = req.body;
+        const order = await razorpay.orders.create(options)
+      
+        if(!order){
+          return  res.status(500).send("ERROR")
+        }
+        res.json(order)
+        
+    } catch (error) {
+        res.status(500).send("Error ")
+    }
+  
 })
 
 module.exports = router

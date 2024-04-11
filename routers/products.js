@@ -2,6 +2,7 @@ const express = require('express')
 const Product = require('../models/product')
 const route = express.Router()
 const Category = require('../models/category')
+const SubCategory = require('../models/subCategory')
 const mongoose = require('mongoose')
 const multer = require('multer')
 const app = express()
@@ -64,8 +65,12 @@ route.post(`/`, upload.single('image'), async (req, res) => {
   try {
       console.log("file==", req.file)
     const category = await Category.findById(req.body.category);
+  
     if (!category) return res.status(400).send('Invalid Category');
-
+   
+    const subcategory = await SubCategory.findById(req.body.subCategory);
+  
+    if (!subcategory) return res.status(400).send('Invalid subcategory');
     const file = req.file;
     if (!file) return res.status(400).send('No image in the request');
 
@@ -79,6 +84,7 @@ route.post(`/`, upload.single('image'), async (req, res) => {
       brand: req.body.brand,
       price: req.body.price,
        category: req.body.category,
+       subCategory:req.body.subCategory,
       countInStock: req.body.countInStock,
       rating: req.body.rating,
       numReviews: req.body.numReviews,
@@ -119,6 +125,8 @@ route.put('/:id', async (req, res) => {
             price: req.body.price,
             category: req.body.category,
             CountInStock: req.body.CountInStock,
+       subCategory:req.body.subCategory,
+
             rating: req.body.rating,
             numReviews: req.body.numReviews,
             isFeatured: req.body.isFeatured,
